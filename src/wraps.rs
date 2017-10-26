@@ -61,8 +61,6 @@ impl Default for Row {
 pub fn bulk_write_rows(rows: &mut Vec<Row>,
                        token: &Token,
                        table: Table) -> Result<String, BTErr> {
-    let mut rows = rows;
-
     let mut req = BTRequest {
         base: None,
         table: table,
@@ -113,34 +111,32 @@ pub fn bulk_write_rows(rows: &mut Vec<Row>,
 /// # }
 /// }
 /// ```
-pub fn write_rows(rows: &mut Vec<Row>,
-                  token: &Token,
-                  table: Table) -> Result<usize, BTErr> {
-    let mut rows = rows;
-    let mut total = 0;
-
-    for row in rows.drain(..) {
-
-        let mut req = BTRequest {
-            base: None,
-            table: table.clone(),
-            method: ReadModifyWriteRow::new()
-        };
-
-        let mut rules: Vec<ReadModifyWriteRule> = Vec::new();
-
-        let rule = make_readmodifywrite_rule(&row.qualifier, &row.family, encode_str(&row.value));
-
-        rules.push(rule);
-
-        req.method.payload_mut().set_row_key(encode_str(&row.row_key));
-        req.method.payload_mut().set_rules(RepeatedField::from_vec(rules));
-
-        let _ = req.execute(token)?;
-        total += 1;
-    }
-    Ok(total)
-}
+//pub fn write_rows(rows: &mut Vec<Row>,
+//                  token: &Token,
+//                  table: &Table) -> Result<usize, BTErr> {
+//    let mut total = 0;
+//
+//    for row in rows.drain(..) {
+//        let mut req = BTRequest {
+//            base: None,
+//            table: table.clone(),
+//            method: ReadModifyWriteRow::new()
+//        };
+//
+//        let mut rules: Vec<ReadModifyWriteRule> = Vec::new();
+//
+//        let rule = make_readmodifywrite_rule(&row.qualifier, &row.family, encode_str(&row.value));
+//
+//        rules.push(rule);
+//
+//        req.method.payload_mut().set_row_key(encode_str(&row.row_key));
+//        req.method.payload_mut().set_rules(RepeatedField::from_vec(rules));
+//
+//        let _ = req.execute(token)?;
+//        total += 1;
+//    }
+//    Ok(total)
+//}
 
 /// ```
 /// extern crate bigtable as bt;
@@ -162,7 +158,7 @@ pub fn write_rows(rows: &mut Vec<Row>,
 /// # }
 /// }
 /// ```
-pub fn read_rows(table: Table,
+pub fn read_rows(table: &Table,
                  token: &Token,
                  rows_limit: Option<i64>) -> Result<serde_json::Value, BTErr> {
     let mut req = BTRequest {
@@ -178,6 +174,25 @@ pub fn read_rows(table: Table,
     let response = req.execute(token)?;
     Ok(response)
 }
+
+use data::RowSet;
+
+pub fn read_row(table: &Table, token: &Token, row: Row) -> Result<serde_json::Value, BTErr> {
+    let mut req = BTRequest {
+        base: None,
+        table: table.clone(),
+        method: ReadRows::new()
+    };
+
+    let mut set = RowSet::new();
+    set.set_row_keys(RepeatedField::from_vec(vec!(encode_str(&row.row_key))));
+
+    req.method.payload_mut().set_rows(set);
+
+    let response = req.execute(token)?;
+    Ok(response)
+}
+
 
 fn make_setcell_mutation(column_qualifier: &str, column_family: &str, blob: Vec<u8>)
                          -> Mutation_SetCell {
