@@ -19,22 +19,22 @@ pub fn get_row_prefix(prefix: Option<&str>) -> String {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Row {
-    pub row_key: String,
-    pub family: String,
-    pub qualifier: String,
-    pub value: String
+    pub row_key: Vec<u8>,
+    pub family: Vec<u8>,
+    pub qualifier: Vec<u8>,
+    pub value: Vec<u8>
 }
 
-impl Default for Row {
-    fn default() -> Self {
-        Row {
-            row_key: String::from("dummy_row_key"),
-            family: String::from("dummy_column_family"),
-            qualifier: String::from("dummy_column_qualifier"),
-            value: String::from("dummy_value"),
-        }
-    }
-}
+//impl Default for Row {
+//    fn default() -> Self {
+//        Row {
+//            row_key: String::from("dummy_row_key"),
+//            family: String::from("dummy_column_family"),
+//            qualifier: String::from("dummy_column_qualifier"),
+//            value: String::from("dummy_value"),
+//        }
+//    }
+//}
 
 
 /// ```
@@ -58,7 +58,7 @@ impl Default for Row {
 /// # }
 /// }
 /// ```
-pub fn bulk_write_rows(rows: &mut Vec<Row>,
+pub fn bulk_write_rows(rows: &Vec<Row>,
                        token: &Token,
                        table: Table) -> Result<String, BTErr> {
     let mut req = BTRequest {
@@ -69,14 +69,14 @@ pub fn bulk_write_rows(rows: &mut Vec<Row>,
 
     let mut mutate_entries = Vec::new();
 
-    for row in rows.drain(..) {
+    for row in rows.iter() {
         let mut mutate_entry = MutateRowsRequest_Entry::new();
-        mutate_entry.set_row_key(encode_str(&row.row_key));
+        mutate_entry.set_row_key(encode_vecu8(&row.row_key));
 
         let mut mutations: Vec<Mutation> = Vec::new();
         let mut mutation = Mutation::new();
 
-        let set_cell = make_setcell_mutation(&row.qualifier, &row.family, encode_str(&row.value));
+        let set_cell = make_setcell_mutation(&row.qualifier, &row.family, encode_vecu8(&row.value));
 
         mutation.set_set_cell(set_cell);
         mutations.push(mutation);
@@ -158,26 +158,10 @@ pub fn bulk_write_rows(rows: &mut Vec<Row>,
 /// # }
 /// }
 /// ```
-pub fn read_rows(table: &Table,
-                 token: &Token,
-                 rows_limit: Option<i64>) -> Result<serde_json::Value, BTErr> {
-    let mut req = BTRequest {
-        base: None,
-        table: table.clone(),
-        method: ReadRows::new()
-    };
-
-    if let Some(x) = rows_limit {
-        req.method.payload_mut().set_rows_limit(x);
-    }
-
-    let response = req.execute(token)?;
-    Ok(response)
-}
 
 use data::RowSet;
 
-pub fn read_row(table: &Table, token: &Token, row: Row) -> Result<serde_json::Value, BTErr> {
+pub fn read_row(table: &Table, token: &Token, row: Vec<u8>) -> Result<serde_json::Value, BTErr> {
     let mut req = BTRequest {
         base: None,
         table: table.clone(),
@@ -185,7 +169,23 @@ pub fn read_row(table: &Table, token: &Token, row: Row) -> Result<serde_json::Va
     };
 
     let mut set = RowSet::new();
-    set.set_row_keys(RepeatedField::from_vec(vec!(encode_str(&row.row_key))));
+    set.set_row_keys(RepeatedField::from_vec(vec!(encode_vecu8(&row))));
+
+    req.method.payload_mut().set_rows(set);
+
+    let response = req.execute(token)?;
+    Ok(response)
+}
+
+pub fn read_rows(table: &Table, token: &Token, rows: Vec<Vec<u8>>) -> Result<serde_json::Value, BTErr> {
+    let mut req = BTRequest {
+        base: None,
+        table: table.clone(),
+        method: ReadRows::new()
+    };
+
+    let mut set = RowSet::new();
+    set.set_row_keys(RepeatedField::from_vec(rows.iter().map(|r| encode_vecu8(row)).collect()));
 
     req.method.payload_mut().set_rows(set);
 
@@ -194,11 +194,11 @@ pub fn read_row(table: &Table, token: &Token, row: Row) -> Result<serde_json::Va
 }
 
 
-fn make_setcell_mutation(column_qualifier: &str, column_family: &str, blob: Vec<u8>)
+fn make_setcell_mutation(column_qualifier: &Vec<u8>, column_family: &Vec<u8>, blob: Vec<u8>)
                          -> Mutation_SetCell {
     let mut set_cell = Mutation_SetCell::new();
-    set_cell.set_column_qualifier(encode_str(column_qualifier));
-    set_cell.set_family_name(String::from(column_family));
+    set_cell.set_column_qualifier(encode_vecu8(column_qualifier));
+    set_cell.set_family_name(String::from_utf8(column_family.clone()).unwrap());
     set_cell.set_timestamp_micros(-1);
     set_cell.set_value(blob);
     set_cell
