@@ -185,7 +185,7 @@ pub fn read_rows(table: &Table, token: &Token, rows: Vec<Vec<u8>>) -> Result<ser
     };
 
     let mut set = RowSet::new();
-    set.set_row_keys(RepeatedField::from_vec(rows.iter().map(|r| encode_vecu8(row)).collect()));
+    set.set_row_keys(RepeatedField::from_vec(rows.iter().map(|row| encode_vecu8(row)).collect()));
 
     req.method.payload_mut().set_rows(set);
 
