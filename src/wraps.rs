@@ -1,13 +1,15 @@
 use serde_json;
 use protobuf::RepeatedField;
 use request::BTRequest;
-use data::{ReadModifyWriteRule, Mutation, Mutation_SetCell};
+use data::{ReadModifyWriteRule, Mutation, Mutation_SetCell, Mutation_DeleteFromColumn};
 use bigtable::MutateRowsRequest_Entry;
 use utils::*;
 use method::{BigTable, ReadRows, ReadModifyWriteRow, MutateRows, SampleRowKeys};
 use error::BTErr;
 use support::Table;
 use goauth::auth::Token;
+use std::collections::HashMap;
+use serde_json::Value;
 
 
 pub fn get_row_prefix(prefix: Option<&str>) -> String {
@@ -90,6 +92,32 @@ pub fn bulk_write_rows(rows: &Vec<Row>,
     Ok(serde_json::to_string(&response)?)
 }
 
+pub fn bulk_mutate(
+    mutations: HashMap<Vec<u8>, Vec<Mutation>>,
+    token: &Token,
+    table: Table
+) -> Result<Value, BTErr> {
+    let mut req = BTRequest {
+        base: None,
+        table: table,
+        method: MutateRows::new()
+    };
+
+    let mut mutate_entries = Vec::new();
+
+    for (row, mutations) in mutations {
+        let mut mutate_entry = MutateRowsRequest_Entry::new();
+        mutate_entry.set_row_key(encode_vecu8(&row));
+        mutate_entry.set_mutations(RepeatedField::from_vec(mutations));
+        mutate_entries.push(mutate_entry);
+    }
+
+    req.method.payload_mut().set_entries(RepeatedField::from_vec(mutate_entries));
+
+    let response = req.execute(token)?;
+    Ok(response)
+}
+
 /// ```
 /// extern crate bigtable as bt;
 ///
@@ -161,7 +189,7 @@ pub fn bulk_write_rows(rows: &Vec<Row>,
 
 use data::RowSet;
 
-pub fn read_row(table: &Table, token: &Token, row: Vec<u8>) -> Result<serde_json::Value, BTErr> {
+pub fn read_row(table: &Table, token: &Token, row: &Vec<u8>) -> Result<Value, BTErr> {
     let mut req = BTRequest {
         base: None,
         table: table.clone(),
@@ -177,7 +205,7 @@ pub fn read_row(table: &Table, token: &Token, row: Vec<u8>) -> Result<serde_json
     Ok(response)
 }
 
-pub fn read_rows(table: &Table, token: &Token, rows: Vec<Vec<u8>>) -> Result<serde_json::Value, BTErr> {
+pub fn read_rows(table: &Table, token: &Token, rows: &Vec<Vec<u8>>) -> Result<Value, BTErr> {
     let mut req = BTRequest {
         base: None,
         table: table.clone(),
@@ -194,13 +222,21 @@ pub fn read_rows(table: &Table, token: &Token, rows: Vec<Vec<u8>>) -> Result<ser
 }
 
 
-fn make_setcell_mutation(column_qualifier: &Vec<u8>, column_family: &Vec<u8>, blob: Vec<u8>)
+pub fn make_setcell_mutation(column_qualifier: &Vec<u8>, column_family: &Vec<u8>, blob: Vec<u8>)
                          -> Mutation_SetCell {
     let mut set_cell = Mutation_SetCell::new();
     set_cell.set_column_qualifier(encode_vecu8(column_qualifier));
     set_cell.set_family_name(String::from_utf8(column_family.clone()).unwrap());
     set_cell.set_timestamp_micros(-1);
     set_cell.set_value(blob);
+    set_cell
+}
+
+pub fn make_delete_mutation(column_qualifier: &Vec<u8>, column_family: &Vec<u8>)
+                        -> Mutation_DeleteFromColumn {
+    let mut set_cell = Mutation_DeleteFromColumn::new();
+    set_cell.set_column_qualifier(encode_vecu8(column_qualifier));
+    set_cell.set_family_name(String::from_utf8(column_family.clone()).unwrap());
     set_cell
 }
 
