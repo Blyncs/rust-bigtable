@@ -19,7 +19,7 @@ pub fn get_row_prefix(prefix: Option<&str>) -> String {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Row {
     pub row_key: Vec<u8>,
     pub family: Vec<u8>,
@@ -78,7 +78,7 @@ pub fn bulk_write_rows(rows: &Vec<Row>,
         let mut mutations: Vec<Mutation> = Vec::new();
         let mut mutation = Mutation::new();
 
-        let set_cell = make_setcell_mutation(&row.qualifier, &row.family, encode_vecu8(&row.value));
+        let set_cell = make_setcell_mutation(&row.qualifier, &row.family, &row.value);
 
         mutation.set_set_cell(set_cell);
         mutations.push(mutation);
@@ -222,30 +222,30 @@ pub fn read_rows(table: &Table, token: &Token, rows: &Vec<Vec<u8>>) -> Result<Va
 }
 
 
-pub fn make_setcell_mutation(column_qualifier: &Vec<u8>, column_family: &Vec<u8>, blob: Vec<u8>)
-                         -> Mutation_SetCell {
+pub fn make_setcell_mutation(column_qualifier: &Vec<u8>, column_family: &Vec<u8>, value: &Vec<u8>)
+                             -> Mutation_SetCell {
     let mut set_cell = Mutation_SetCell::new();
     set_cell.set_column_qualifier(encode_vecu8(column_qualifier));
     set_cell.set_family_name(String::from_utf8(column_family.clone()).unwrap());
     set_cell.set_timestamp_micros(-1);
-    set_cell.set_value(blob);
+    set_cell.set_value(encode_vecu8(value));
     set_cell
 }
 
-pub fn make_delete_mutation(column_qualifier: &Vec<u8>, column_family: &Vec<u8>)
-                        -> Mutation_DeleteFromColumn {
+pub fn make_delete_mutation(column_qualifier: &Option<Vec<u8>>, column_family: &Option<Vec<u8>>)
+                            -> Mutation_DeleteFromColumn {
     let mut set_cell = Mutation_DeleteFromColumn::new();
-    set_cell.set_column_qualifier(encode_vecu8(column_qualifier));
-    set_cell.set_family_name(String::from_utf8(column_family.clone()).unwrap());
+    column_qualifier.as_ref().map(|column_qualifier| set_cell.set_column_qualifier(encode_vecu8(column_qualifier)));
+    column_family.as_ref().map(|column_family| set_cell.set_family_name(String::from_utf8(column_family.clone()).unwrap()));
     set_cell
 }
 
-fn make_readmodifywrite_rule(column_qualifier: &str, column_familiy: &str, blob: Vec<u8>)
+fn make_readmodifywrite_rule(column_qualifier: &str, column_familiy: &str, value: &Vec<u8>)
                              -> ReadModifyWriteRule {
     let mut rule = ReadModifyWriteRule::new();
     rule.set_family_name(String::from(column_familiy));
     rule.set_column_qualifier(encode_str(column_qualifier));
-    rule.set_append_value(blob);
+    rule.set_append_value(encode_vecu8(value));
     rule
 }
 
